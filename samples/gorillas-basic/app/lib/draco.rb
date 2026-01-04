@@ -760,41 +760,49 @@ module Draco
   #
   # Examples
   #
-  #   underscore("CamelCase")
-  #   # => "camel_case"
+  #   underscore("CamelCase::Example")
+  #   # => "camel_case/example"
   #
   # Returns a String.
-  def self.underscore(string)
-    string.to_s.split("::").last.bytes.map.with_index do |byte, i|
-      if byte > 64 && byte < 97
-        downcased = byte + 32
-        i.zero? ? downcased.chr : "_#{downcased.chr}"
-      else
-        byte.chr
-      end
-    end.join
+  def self.underscore(camel_cased_word)
+    word = camel_cased_word.to_s.dup
+    word.gsub!(/::/, '/')
+    word.gsub!(/([A-Z]+)([A-Z][a-z])/,'\1_\2')
+    word.gsub!(/([a-z\d])([A-Z])/,'\1_\2')
+    word.tr!("-", "_")
+    word.downcase!
+    word
   end
 
   # Internal: Converts an underscored string into a camel case string.
   #
   # Examples
   #
-  #   camlize("camel_case")
-  #   # => "CamelCase"
+  #   camlize("camel_case/example")
+  #   # => "CamelCase::Example"
   #
   # Returns a string.
-  def self.camelize(string) # rubocop:disable Metrics/MethodLength
-    modifier = -32
+  def self.camelize(lower_case_and_underscored_word)
+    lower_case_and_underscored_word.to_s.gsub(/\/(.?)/) { "::#{$1.upcase}" }.gsub(/(?:^|_)(.)/) { $1.upcase }
+  end
 
-    string.to_s.bytes.map do |byte|
-      if byte == 95
-        modifier = -32
-        nil
-      else
-        char = (byte + modifier).chr
-        modifier = 0
-        char
-      end
-    end.compact.join
+
+  # Internal: Converts an CamelCase String to a Class/Module
+  #
+  # Examples
+  #
+  #   camlize("camel_case/example")
+  #   # => "CamelCase::Example"
+  #
+  # Returns a Class.
+  def self.constantize(camel_cased_word)
+    names = camel_cased_word.split('::')
+    names.shift if names.empty? || names.first.empty?
+
+    constant = Object
+    names.each do |name|
+      constant = constant.const_defined?(name, false) ? constant.const_get(name) : constant.const_missing(name)
+    end
+    constant
   end
 end
