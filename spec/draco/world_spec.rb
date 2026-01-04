@@ -9,26 +9,35 @@ class FilteredComponent < Draco::Component
 end
 
 class AnotherComponent < Draco::Component; end
+class FooComponent < Draco::Component; end
 
 class WorldEntity < Draco::Entity
   component WorldComponent
+  component :foo_component, class_name: "WorldComponent"
 end
 
 class FilteredEntity < Draco::Entity
   component FilteredComponent
 end
 
+class FooEntity < Draco::Entity
+  component WorldComponent
+  component :foo_component, class_name: "WorldComponent"
+end
+
 class WorldSystem < Draco::System
-  filter WorldComponent
+  filter WorldComponent, :foo_component
 
   def tick(_)
-    entities.each { |e| e.world_component.tested = true }
+    entities.each do |e|
+      e.world_component.tested = true
+    end
   end
 end
 
 class SampleWorld < Draco::World
   entity WorldEntity
-  entity WorldEntity
+  entity FooEntity
   entity FilteredEntity, filtered_component: { tested: true }, as: :filtered_entity
   systems WorldSystem
 end
@@ -111,10 +120,10 @@ RSpec.describe Draco::World do
     end
 
     it "updates component map when entity deletes a component" do
-      expect(world.filter([FilteredComponent])).to_not be_empty
+      expect(world.filter([:filtered_component])).to_not be_empty
       entity.components.delete(entity.filtered_component)
 
-      expect(world.filter([FilteredComponent])).to be_empty
+      expect(world.filter([:filtered_component])).to be_empty
     end
 
     it "updates component map when entity adds a component" do

@@ -29,6 +29,7 @@ module Draco
     #
     # component - The class of the Component to add by default.
     # defaults - The Hash of default values for the Component data. (default: {})
+    #           :class_name - The camel-case name of the Component class.
     #
     # Examples
     #
@@ -36,9 +37,18 @@ module Draco
     #
     #   component(Position, x: 0, y: 0)
     #
+    #   component(:name)
+    #
+    #   component(:size, class_name: "Dimension")
+    #
     # Returns nothing.
     def self.component(component, defaults = {})
-      @default_components[component] = defaults
+      underscored_component = if component.is_a?(Class)
+                                Draco.underscore(component.to_s).to_sym
+                              elsif component.is_a?(Symbol)
+                                component
+                              end
+      @default_components[underscored_component] = defaults
     end
 
     # Public: Creates a tag Component. If the tag already exists, return it.
@@ -90,8 +100,17 @@ module Draco
       @components = ComponentStore.new(self)
 
       self.class.default_components.each do |component, default_args|
-        arguments = default_args.merge(args[Draco.underscore(component.name.to_s).to_sym] || {})
-        @components << component.new(arguments)
+        underscored_component = if component.is_a?(Symbol)
+                                  component
+                                elsif component.is_a?(Class)
+                                  Draco.underscore(component).to_sym
+                                end
+
+        arguments = default_args.merge(args[component].dup || {})
+        class_name = arguments.delete(:class_name)
+
+        component_class = Draco.constantize(Draco.camelize(class_name || underscored_component))
+        @components.add(component_class.new(arguments.merge(name: underscored_component.to_sym)))
       end
     end
 
@@ -191,7 +210,6 @@ module Draco
     #   creature.creature_stats
     #
     # Returns the Component instance.
-
     def method_missing(method, *args, &block)
       component = components[method.to_sym]
       return component if component
@@ -230,7 +248,7 @@ module Draco
 
       # Internal: Returns the Component with the underscored Component name.
       #
-      # underscored_component - The String underscored version of the Component's class name.
+      # underscored_component - The Symbol underscored version of the Component's class name.
       #
       # Returns the Component instance or nil.
       def [](underscored_component)
@@ -252,7 +270,7 @@ module Draco
 
         component = @parent.before_component_added(component)
         name = Draco.underscore(component.class.name.to_s).to_sym
-        @components[name] = component
+        @components[(component.name || name).to_sym] = component
         @parent.after_component_added(component)
 
         self
@@ -261,13 +279,20 @@ module Draco
       # Internal: Removes a Component from the ComponentStore.
       #
       # Side Effects: Notifies the parent that the components were updated.
+      # This only works if the Component does not have an alias.
       #
       # components - The Component to remove from the ComponentStore.
       #
       # Returns the ComponentStore.
-      def delete(component)
+      def delete(component_or_symbol)
+        if component_or_symbol.is_a?(Symbol)
+          component = @components[component_or_symbol]
+          name = component_or_symbol
+        else
+          component = component_or_symbol
+          name = Draco.underscore(component_or_symbol.name.to_s).to_sym
+        end
         component = @parent.before_component_removed(component)
-        name = Draco.underscore(component.class.name.to_s).to_sym
         @components.delete(name)
         @parent.after_component_removed(component)
 
@@ -292,6 +317,7 @@ module Draco
   # Public: The data to associate with an Entity.
   class Component
     @attribute_options = {}
+    attr_reader :name
 
     # Internal: Resets the attribute options for each class that inherits Component.
     #
@@ -348,6 +374,7 @@ module Draco
         value = values.fetch(name.to_sym, options[:default].dup)
         instance_variable_set("@#{name}", value)
       end
+      instance_variable_set("@name", values[:name] || Draco.underscore(self.class.to_s).to_sym)
       after_initialize
     end
 
@@ -362,7 +389,7 @@ module Draco
     #
     # Returns a Hash representing the Component.
     def serialize
-      attrs = { class: self.class.name.to_s }
+      attrs = { class: self.class.name.to_s, object_id: object_id }
 
       instance_variables.each do |attr|
         name = attr.to_s.gsub("@", "").to_sym
@@ -419,7 +446,7 @@ module Draco
       @filter
     end
 
-    # Internal: Resets the fuilter for each class that inherits System.
+    # Internal: Resets the filter for each class that inherits System.
     #
     # sub - The class that is inheriting Entity.
     #
@@ -429,7 +456,7 @@ module Draco
       sub.instance_variable_set(:@filter, [])
     end
 
-    # Public: Creates a tag Component. If the tag already exists, return it.
+    # Public: Creates a Tag Component. If the tag already exists, return it.
     #
     # name - The string or symbol name of the component.
     #
@@ -658,11 +685,11 @@ module Draco
 
     # Public: Finds all Entities that contain all of the given Components.
     #
-    # components - An Array of Component classes to match.
+    # components - An Array of Component classes or Symbol names to match.
     #
     # Returns an Array of matching Entities.
     def filter(*components)
-      entities[components.flatten]
+      entities[components.flatten.map { |c| c.is_a?(Integer) ? c : Draco.underscore(c).to_sym }]
     end
 
     # Public: Serializes the World to save the current state.
@@ -712,20 +739,22 @@ module Draco
       def [](*components_or_ids)
         components_or_ids
           .flatten
-          .map { |component_or_id| select_entities(component_or_id) }
-          .reduce { |acc, i| i & acc }
+          .map do |component_or_id|
+            id = component_or_id.is_a?(Integer) ? component_or_id : Draco.underscore(component_or_id)
+            select_entities(id)
+        end.reduce { |acc, i| i & acc }
       end
 
       # Internal: Gets entities by component or id.
       #
-      # component_or_id - The Component Class or entity id to select.
+      # component_or_id - The underscore component name or entity id to select.
       #
       # Returns an Array of Entities.
       def select_entities(component_or_id)
         if component_or_id.is_a?(Numeric)
           Array(@entity_ids[component_or_id])
         else
-          @component_to_entities[component_or_id]
+          @component_to_entities[component_or_id.to_sym]
         end
       end
 
@@ -748,7 +777,7 @@ module Draco
         entity.subscribe(self)
 
         @entity_ids[entity.id] = entity
-        components = entity.components.map(&:class)
+        components = entity.components.map(&:name)
         @entity_to_components[entity].merge(components)
 
         components.each { |component| @component_to_entities[component].add(entity) }
@@ -788,7 +817,7 @@ module Draco
       #
       # Returns nothing.
       def component_added(entity, component)
-        @component_to_entities[component.class].add(entity)
+        @component_to_entities[component.name].add(entity)
         @parent.component_added(entity, component)
       end
 
@@ -799,7 +828,7 @@ module Draco
       #
       # Returns nothing.
       def component_removed(entity, component)
-        @component_to_entities[component.class].delete(entity)
+        @component_to_entities[component.name].delete(entity)
         @parent.component_removed(entity, component)
       end
     end

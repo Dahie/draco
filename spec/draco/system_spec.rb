@@ -4,6 +4,10 @@ class SampleSystem < Draco::System
   filter SampleComponent
 end
 
+class SampleFooSystem < Draco::System
+  filter :sample_component
+end
+
 class SampleTagSystem < Draco::System
   filter Tag(:test_tag)
 end
@@ -28,10 +32,16 @@ RSpec.describe Draco::System do
       it { is_expected.to be_empty }
     end
 
-    context "with a set filter" do
+    context "when filtering SampleComponent" do
       subject { SampleSystem.filter }
 
       it { is_expected.to include(SampleComponent) }
+    end
+
+    context "when filtering :sample_component" do
+      subject { SampleFooSystem.filter }
+
+      it { is_expected.to include(:sample_component) }
     end
   end
 
@@ -62,5 +72,21 @@ RSpec.describe Draco::System do
     subject { SampleSystem.new.to_s }
 
     it { is_expected.to be }
+  end
+
+  describe "#entities" do
+    let(:entity) { SampleComponent.new }
+    let(:entity2) { ListComponent.new }
+    context "when filtering SampleComponent" do
+      subject { SampleSystem.new(entities: [entity, entity2]).entities }
+
+      it { is_expected.to include(entity) }
+    end
+
+    context "when filtering :sample_component" do
+      subject { SampleSystem.new(entities: [entity, entity2]).entities }
+
+      it { is_expected.to include(entity) }
+    end
   end
 end

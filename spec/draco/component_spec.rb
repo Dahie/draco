@@ -21,7 +21,7 @@ RSpec.describe Draco::Component do
     subject { SampleComponent.new }
 
     it "defaults to nil" do
-      expect(subject.name).to be_nil
+      expect(subject.name).to be(:sample_component)
     end
 
     it "defaults to the given default value" do
@@ -31,9 +31,7 @@ RSpec.describe Draco::Component do
     it "runs the overridden initializer" do
       expect(subject.test).to be true
     end
-  end
 
-  describe ".attribute" do
     context "with ListComponent" do
       subject { ListComponent.new }
       let(:sibling) { ListComponent.new }
@@ -64,7 +62,7 @@ RSpec.describe Draco::Component do
     end
 
     it "serializes the attributes" do
-      expect(subject[:name]).to be_nil
+      expect(subject[:name]).to be(:sample_component)
       expect(subject[:velocity]).to eq(0)
     end
   end
@@ -78,6 +76,9 @@ RSpec.describe Draco::Component do
   describe "#to_s" do
     subject { SampleComponent.new.to_s }
 
-    it { is_expected.to be }
+    it { is_expected.to include("object_id") }
+    it { is_expected.to include("id") }
+    it { is_expected.to include("class") }
+    it { is_expected.to include("name") }
   end
 end
