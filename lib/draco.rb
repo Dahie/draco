@@ -345,7 +345,7 @@ module Draco
     #   Position.new(x: 100, y: 100)
     def initialize(values = {})
       self.class.attribute_options.each do |name, options|
-        value = values.fetch(name.to_sym, options[:default])
+        value = values.fetch(name.to_sym, options[:default].dup)
         instance_variable_set("@#{name}", value)
       end
       after_initialize

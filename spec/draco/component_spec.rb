@@ -12,6 +12,10 @@ class SampleComponent < Draco::Component
   end
 end
 
+class ListComponent < Draco::Component
+  attribute :list, default: []
+end
+
 RSpec.describe Draco::Component do
   describe "attribute" do
     subject { SampleComponent.new }
@@ -26,6 +30,29 @@ RSpec.describe Draco::Component do
 
     it "runs the overridden initializer" do
       expect(subject.test).to be true
+    end
+  end
+
+  describe ".attribute" do
+    context "with ListComponent" do
+      subject { ListComponent.new }
+      let(:sibling) { ListComponent.new }
+
+      it "it changes on instance" do
+        expect do
+          subject.list << "Example"
+        end.to_not(change { sibling.list.count })
+      end
+    end
+    context "with SampleComponent" do
+      subject { SampleComponent.new }
+      let(:sibling) { SampleComponent.new }
+
+      it "it changes on instance" do
+        expect do
+          subject.velocity = 10
+        end.to_not(change { sibling.velocity })
+      end
     end
   end
 
