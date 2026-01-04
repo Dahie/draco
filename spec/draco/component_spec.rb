@@ -12,8 +12,14 @@ class SampleComponent < Draco::Component
   end
 end
 
+class SampleSharedComponent < Draco::Component
+  shared_attribute :velocity, default: 0
+  shared_attribute :list, default: []
+end
+
 class ListComponent < Draco::Component
   attribute :list, default: []
+  delegate(:each, :count, :<<, to: :list)
 end
 
 RSpec.describe Draco::Component do
@@ -54,6 +60,21 @@ RSpec.describe Draco::Component do
     end
   end
 
+  xdescribe ".shared_attribute" do
+    subject { SampleSharedComponent.new }
+    let(:sibling) { SampleSharedComponent.new }
+    it "it changes velocity in both instances" do
+      expect do
+        subject.velocity = 10
+      end.to(change { sibling.velocity }).from(0).to(10)
+    end
+    it "it changes list in both instances" do
+      expect do
+        subject.list << "example"
+      end.to change { sibling.list.count }.from(0).to(1)
+    end
+  end
+
   describe "#serialize" do
     subject { SampleComponent.new.serialize }
 
@@ -80,5 +101,44 @@ RSpec.describe Draco::Component do
     it { is_expected.to include("id") }
     it { is_expected.to include("class") }
     it { is_expected.to include("name") }
+  end
+
+  describe "delegate" do
+    context "with ListComponent" do
+      subject { ListComponent.new }
+
+      context "when calling count" do
+        it "it returns 1" do
+          subject.list << "Example"
+          expect(subject.count).to be(1)
+        end
+
+        it "responds_to :count" do
+          expect(subject.respond_to?(:count)).to be(true)
+        end
+      end
+      context "when calling <<" do
+        it "it returns 2" do
+          expect do
+            subject.list << "Example"
+            subject << "Example"
+          end.to change { subject.count }.by(2)
+        end
+        it "responds_to :<<" do
+          expect(subject.respond_to?(:<<)).to be(true)
+        end
+      end
+      context "when calling :each" do
+        it "it calls " do
+          subject.list << "Example1"
+          subject.each do |e|
+            expect(e).to eq("Example1")
+          end
+        end
+        it "responds_to :<<" do
+          expect(subject.respond_to?(:<<)).to be(true)
+        end
+      end
+    end
   end
 end

@@ -317,6 +317,7 @@ module Draco
   # Public: The data to associate with an Entity.
   class Component
     @attribute_options = {}
+    @delegations = {}
     attr_reader :name
 
     # Internal: Resets the attribute options for each class that inherits Component.
@@ -327,6 +328,7 @@ module Draco
     def self.inherited(sub)
       super
       sub.instance_variable_set(:@attribute_options, {})
+      sub.instance_variable_set(:@delegations, {})
     end
 
     # Public: Defines an attribute for the Component.
@@ -334,6 +336,7 @@ module Draco
     # name - The Symbol name of the attribute.
     # options - The Hash options for the Component (default: {}):
     #           :default - The initial value for the attribute if one is not provided.
+    #           :shared - Setting this to true makes this attribute to a shared attribute
     #
     # Returns nothing.
     def self.attribute(name, options = {})
@@ -342,9 +345,41 @@ module Draco
       @attribute_options[name] = options
     end
 
+    # Public: Defines an attribute whose values are shared between Component.
+    # When two Components have a shared_attribute of the same name, changing values in
+    # one Component will update the second.
+    #
+    # name - The Symbol name of the attribute.
+    # options - The Hash options for the Component (default: {}):
+    #           :default - The initial value for the attribute if one is not provided.
+    #           :shared - The initial value for the attribute if one is not provided.
+    #
+    # Returns nothing.
+    def self.shared_attribute(name, options = {})
+      attribute(name, options.merge(shared: true))
+    end
+
+    def self.delegate(*methods, to:)
+      @delegations[to] = methods
+    end
+
+    def method_missing(method, *args, &block)
+      if (delegated = @delegations.keys.find { |k| send(k).respond_to?(method) })
+        result = send(delegated).send(method, *args, &block) if @delegations[delegated].index(method)
+        return result if result
+      end
+
+      super
+    end
+
+    def respond_to_missing?(method, _include_private = false)
+      delegated = @delegations.keys.find { |k| send(k).respond_to?(method) }
+      !!@delegations[delegated]&.index(method) or super
+    end
+
     # Internal: Returns the Hash attribute options for the current Class.
     class << self
-      attr_reader :attribute_options
+      attr_reader :attribute_options, :delegations
     end
 
     # Public: Creates a tag Component. If the tag already exists, return it.
@@ -370,6 +405,7 @@ module Draco
     #
     #   Position.new(x: 100, y: 100)
     def initialize(values = {})
+      instance_variable_set("@delegations", self.class.delegations)
       self.class.attribute_options.each do |name, options|
         value = values.fetch(name.to_sym, options[:default].dup)
         instance_variable_set("@#{name}", value)
