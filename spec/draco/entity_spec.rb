@@ -11,7 +11,7 @@ end
 class TestEntity < Draco::Entity
   component TestComponent, test: 3
   component :test_component2, test: 4
-  component :alternate_name, class_name: "TestComponent", test: 5
+  component :alternate_name, class_name: "TestComponent2", test: 5
   component Tag(:test_tag)
 end
 

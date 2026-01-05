@@ -3,10 +3,11 @@
 RSpec.describe Draco do
   describe ".underscore" do
     {
-      Draco => "draco",
-      Draco::Entity => "draco/entity",
+      "RangeError" => "range_error",
+      "Random::Formatter" => "formatter",
+      "WorldComponent" => "world_component",
       "Draco" => "draco",
-      "Draco::Entity" => "draco/entity"
+      "Draco::Entity" => "entity"
     }.each do |example, expectation|
       context "with example #{example}" do
         subject { Draco.underscore(example) }
@@ -21,8 +22,8 @@ RSpec.describe Draco do
 
   describe ".camelize" do
     {
-      "draco" => "Draco",
-      "draco/entity" => "Draco::Entity"
+      "draco_don" => "DracoDon",
+      "draco_don/entity_don" => "DracoDon::EntityDon"
     }.each do |example, expectation|
       context "with example #{example}" do
         subject { Draco.camelize(example) }
@@ -38,7 +39,9 @@ RSpec.describe Draco do
   describe ".constantize" do
     {
       "Draco" => Draco,
-      "Draco::Entity" => Draco::Entity
+      "Draco::Entity" => Draco::Entity,
+      "RangeError" => RangeError,
+      "Random::Formatter" => Random::Formatter
     }.each do |example, expectation|
       context "with example #{example}" do
         subject { Draco.constantize(example) }

@@ -33,13 +33,25 @@ RSpec.describe Draco::System do
     end
 
     context "when filtering SampleComponent" do
-      subject { SampleSystem.filter }
+      subject { SampleSystem.filter(SampleComponent) }
 
       it { is_expected.to include(SampleComponent) }
     end
 
     context "when filtering :sample_component" do
-      subject { SampleFooSystem.filter }
+      subject { SampleFooSystem.filter(:sample_component) }
+
+      it { is_expected.to include(:sample_component) }
+    end
+
+    context "when filtering SampleComponent with exception" do
+      subject { SampleSystem.filter(SampleComponent, except: [FooComponentComponent]) }
+
+      it { is_expected.to include(SampleComponent })
+    end
+
+    context "when filtering :sample_component with exception" do
+      subject { SampleSystem.filter(:sample_component, except: [:foo_component]) }
 
       it { is_expected.to include(:sample_component) }
     end
@@ -77,6 +89,7 @@ RSpec.describe Draco::System do
   describe "#entities" do
     let(:entity) { SampleComponent.new }
     let(:entity2) { ListComponent.new }
+
     context "when filtering SampleComponent" do
       subject { SampleSystem.new(entities: [entity, entity2]).entities }
 

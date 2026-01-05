@@ -13,7 +13,7 @@ class FooComponent < Draco::Component; end
 
 class WorldEntity < Draco::Entity
   component WorldComponent
-  component :foo_component, class_name: "WorldComponent"
+  component :bar_component, class_name: "WorldComponent"
 end
 
 class FilteredEntity < Draco::Entity
@@ -22,11 +22,11 @@ end
 
 class FooEntity < Draco::Entity
   component WorldComponent
-  component :foo_component, class_name: "WorldComponent"
+  component :bar_component, class_name: "WorldComponent"
 end
 
 class WorldSystem < Draco::System
-  filter WorldComponent, :foo_component
+  filter(WorldComponent, :bar_component, except: [FooComponent])
 
   def tick(_)
     entities.each do |e|
@@ -146,24 +146,60 @@ RSpec.describe Draco::World do
       entity.components << FilteredComponent.new
       entity
     end
+    let(:entity2) do
+      entity = Draco::Entity.new
+      entity.components << WorldComponent.new
+      entity.components << FilteredComponent.new
+      entity.components << AnotherComponent.new
+      entity
+    end
 
     let(:world) do
       world = Draco::World.new
       world.entities << entity
+      world.entities << entity2
       world
     end
 
     it "works with one component" do
-      expect(world.filter(WorldComponent)).to_not be_empty
+      expect(world.filter(WorldComponent)).to include(entity, entity2)
     end
 
     it "works with multiple components" do
-      expect(world.filter(WorldComponent, FilteredComponent)).to_not be_empty
+      expect(world.filter(WorldComponent, :bar_component)).to include(entity, entity2)
+    end
+
+    it "can make exceptions" do
+      expect(world.filter(WorldComponent, except: [AnotherComponent])).to include(entity)
+      expect(world.filter(WorldComponent, except: [AnotherComponent])).to_not include(entity2)
+    end
+
+    it "can make exceptions with Symbols" do
+      expect(world.filter(:world_component, except: [:another_component])).to include(entity)
+      expect(world.filter(:world_component, except: [:another_component])).to_not include(entity2)
+    end
+
+    it "can make exceptions when nothing found" do
+      expect(world.filter(FooComponent, except: [FilteredComponent])).to_not include(entity, entity2)
+    end
+
+    it "can make exceptions with Symbols when nothing found" do
+      expect(world.filter(:foo_component, except: [:filtered_component])).to_not include(entity, entity2)
     end
 
     it "works with an entity id" do
       entity = world.entities.first
       expect(world.filter(entity.id)).to_not be_empty
+    end
+
+    it "works with an empty world" do
+      world = SampleWorld.new
+      expect(world.filter(FooComponent)).to be_empty
+    end
+
+    it "works with an empty world and exceptions" do
+      world = SampleWorld.new
+      expect(world.filter(FooComponent, except: [FilteredComponent])).to be_empty
     end
   end
 

@@ -104,12 +104,14 @@ module Draco
                                   component
                                 elsif component.is_a?(Class)
                                   Draco.underscore(component).to_sym
+                                else
+                                  raise("#{component.inspect} is no valid Component class or :class_name.")
                                 end
 
         arguments = default_args.merge(args[component].dup || {})
         class_name = arguments.delete(:class_name)
 
-        component_class = Draco.constantize(Draco.camelize(class_name || underscored_component))
+        component_class = Draco.constantize(class_name || Draco.camelize(underscored_component))
         @components.add(component_class.new(arguments.merge(name: underscored_component.to_sym)))
       end
     end
@@ -175,7 +177,7 @@ module Draco
       serialized = { class: self.class.name.to_s, id: id }
 
       components.each do |component|
-        serialized[Draco.underscore(component.class.name.to_s).to_sym] = component.serialize
+        serialized[component.name] = component.serialize
       end
 
       serialized
@@ -269,7 +271,7 @@ module Draco
         end
 
         component = @parent.before_component_added(component)
-        name = Draco.underscore(component.class.name.to_s).to_sym
+        name = Draco.underscore(Draco.demodulize(component.class.name.to_s)).to_sym
         @components[(component.name || name).to_sym] = component
         @parent.after_component_added(component)
 
@@ -290,7 +292,7 @@ module Draco
           name = component_or_symbol
         else
           component = component_or_symbol
-          name = Draco.underscore(component_or_symbol.name.to_s).to_sym
+          name = component_or_symbol.name.to_sym
         end
         component = @parent.before_component_removed(component)
         @components.delete(name)
@@ -410,7 +412,7 @@ module Draco
         value = values.fetch(name.to_sym, options[:default].dup)
         instance_variable_set("@#{name}", value)
       end
-      instance_variable_set("@name", values[:name] || Draco.underscore(self.class.to_s).to_sym)
+      @name = (values[:name] || Draco.underscore(Draco.demodulize(self.class.name))).to_sym
       after_initialize
     end
 
@@ -464,6 +466,7 @@ module Draco
   # The System runs on each tick and manipulates the Entities in the World.
   class System
     @filter = []
+    @filter_options = {}
 
     # Public: Returns an Array of Entities that match the filter.
     attr_accessor :entities
@@ -472,12 +475,15 @@ module Draco
     attr_accessor :world
 
     # Public: Adds the given Components to the default filter of the System.
+    # options: except: []
     #
     # Returns the current filter.
-    def self.filter(*components)
+    def self.filter(*components, except: [])
       components.each do |component|
         @filter << component
       end
+
+      @filter_options[:except] = except
 
       @filter
     end
@@ -490,6 +496,7 @@ module Draco
     def self.inherited(sub)
       super
       sub.instance_variable_set(:@filter, [])
+      sub.instance_variable_set(:@filter_options, {})
     end
 
     # Public: Creates a Tag Component. If the tag already exists, return it.
@@ -562,6 +569,8 @@ module Draco
       {
         class: self.class.name.to_s,
         entities: entities.map(&:serialize),
+        filter: instance_variable_get(:@filter),
+        filter_options: instance_variable_get(:@filter_options),
         world: world ? world.serialize : nil
       }
     end
@@ -674,7 +683,9 @@ module Draco
     # Returns the systems to run during this tick.
     def before_tick(_context)
       systems.map do |system|
-        entities = filter(system.filter)
+        filter = system.instance_variable_get(:@filter)
+        filter_options = system.instance_variable_get(:@filter_options)
+        entities = filter(*filter, **filter_options)
 
         system.new(entities: entities, world: self)
       end
@@ -724,8 +735,23 @@ module Draco
     # components - An Array of Component classes or Symbol names to match.
     #
     # Returns an Array of matching Entities.
-    def filter(*components)
-      entities[components.flatten.map { |c| c.is_a?(Integer) ? c : Draco.underscore(c).to_sym }]
+    def filter(*components, except: [])
+      entities[components.flatten.map do |c|
+        case c.class.to_s
+        when "Symbol"
+          c
+        when "Integer"
+          c
+        else
+          # Draco.underscore(Draco.demodulize(c.class.name)).to_sym
+          Draco.underscore(c).to_sym
+        end
+      end]&.reject do |c|
+        except.any? do |exception|
+          component_name = exception.is_a?(Symbol) ? exception : Draco.underscore(Draco.demodulize(exception.name)).to_sym
+          c.components[component_name]
+        end
+      end
     end
 
     # Public: Serializes the World to save the current state.
@@ -776,7 +802,14 @@ module Draco
         components_or_ids
           .flatten
           .map do |component_or_id|
-            id = component_or_id.is_a?(Integer) ? component_or_id : Draco.underscore(component_or_id)
+            id = case component_or_id.class.to_s
+                 when "Integer"
+                   component_or_id
+                 when "Symbol"
+                   component_or_id
+                 else
+                   Draco.underscore(component_or_id) # .to_sym
+                 end
             select_entities(id)
         end.reduce { |acc, i| i & acc }
       end
@@ -813,7 +846,7 @@ module Draco
         entity.subscribe(self)
 
         @entity_ids[entity.id] = entity
-        components = entity.components.map(&:name)
+        components = entity.components.map(&:name).map(&:to_sym)
         @entity_to_components[entity].merge(components)
 
         components.each { |component| @component_to_entities[component].add(entity) }
@@ -991,13 +1024,16 @@ module Draco
   #
   # Returns a String.
   def self.underscore(camel_cased_word)
-    word = camel_cased_word.to_s.dup
-    word.gsub!("::", "/")
-    word.gsub!(/([A-Z]+)([A-Z][a-z])/, '\1_\2')
-    word.gsub!(/([a-z\d])([A-Z])/, '\1_\2')
-    word.tr!("-", "_")
-    word.downcase!
-    word
+    camel_cased_word.to_s.split("::").map do |part|
+      part.bytes.map.with_index do |byte, i|
+        if byte > 64 && byte < 97
+          downcased = byte + 32
+          i.zero? ? downcased.chr : "_#{downcased.chr}"
+        else
+          byte.chr
+        end
+      end.join
+    end.last
   end
 
   # Internal: Converts an underscored string into a camel case string.
@@ -1009,9 +1045,18 @@ module Draco
   #
   # Returns a string.
   def self.camelize(lower_case_and_underscored_word)
-    lower_case_and_underscored_word.to_s.gsub(%r{/(.?)}) do
-      "::#{::Regexp.last_match(1).upcase}"
-    end.gsub(/(?:^|_)(.)/) { ::Regexp.last_match(1).upcase }
+    raise if lower_case_and_underscored_word == "Worldcomp^onent"
+
+    lower_case_and_underscored_word
+      .to_s
+      .split("/")
+      .map do |part|
+        part
+          .split("_")
+          .map { |word| word.capitalize }
+          .join
+      end
+    .join("::")
   end
 
   # Internal: Converts an CamelCase String to a Class/Module
@@ -1022,8 +1067,8 @@ module Draco
   #   # => "CamelCase::Example"
   #
   # Returns a Class.
-  def self.constantize(camel_cased_word)
-    names = camel_cased_word.split("::")
+  def self.constantize(input)
+    names = input.split("::")
     names.shift if names.empty? || names.first.empty?
 
     constant = Object
@@ -1031,5 +1076,17 @@ module Draco
       constant = constant.const_defined?(name, false) ? constant.const_get(name) : constant.const_missing(name)
     end
     constant
+  end
+
+  # Internal:
+  #
+  # Examples
+  #
+  #   demodulize("Draco::Entity")
+  #   # => "Entity"
+  #
+  # Returns a Class.
+  def self.demodulize(input)
+    input.split("::").last
   end
 end
