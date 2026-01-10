@@ -121,7 +121,8 @@ module Draco
     # This is empty by default but is present to allow plugins to tie into.
     #
     # Returns nothing.
-    def after_initialize; end
+    def after_initialize
+    end
 
     # Public: Subscribe to an Entity's Component updates.
     #
@@ -319,7 +320,6 @@ module Draco
   # Public: The data to associate with an Entity.
   class Component
     @attribute_options = {}
-    @delegations = {}
     attr_reader :name
 
     # Internal: Resets the attribute options for each class that inherits Component.
@@ -330,7 +330,6 @@ module Draco
     def self.inherited(sub)
       super
       sub.instance_variable_set(:@attribute_options, {})
-      sub.instance_variable_set(:@delegations, {})
     end
 
     # Public: Defines an attribute for the Component.
@@ -338,7 +337,6 @@ module Draco
     # name - The Symbol name of the attribute.
     # options - The Hash options for the Component (default: {}):
     #           :default - The initial value for the attribute if one is not provided.
-    #           :shared - Setting this to true makes this attribute to a shared attribute
     #
     # Returns nothing.
     def self.attribute(name, options = {})
@@ -347,41 +345,9 @@ module Draco
       @attribute_options[name] = options
     end
 
-    # Public: Defines an attribute whose values are shared between Component.
-    # When two Components have a shared_attribute of the same name, changing values in
-    # one Component will update the second.
-    #
-    # name - The Symbol name of the attribute.
-    # options - The Hash options for the Component (default: {}):
-    #           :default - The initial value for the attribute if one is not provided.
-    #           :shared - The initial value for the attribute if one is not provided.
-    #
-    # Returns nothing.
-    def self.shared_attribute(name, options = {})
-      attribute(name, options.merge(shared: true))
-    end
-
-    def self.delegate(*methods, to:)
-      @delegations[to] = methods
-    end
-
-    def method_missing(method, *args, &block)
-      if (delegated = @delegations.keys.find { |k| send(k).respond_to?(method) })
-        result = send(delegated).send(method, *args, &block) if @delegations[delegated].index(method)
-        return result if result
-      end
-
-      super
-    end
-
-    def respond_to_missing?(method, _include_private = false)
-      delegated = @delegations.keys.find { |k| send(k).respond_to?(method) }
-      !!@delegations[delegated]&.index(method) or super
-    end
-
     # Internal: Returns the Hash attribute options for the current Class.
     class << self
-      attr_reader :attribute_options, :delegations
+      attr_reader :attribute_options
     end
 
     # Public: Creates a tag Component. If the tag already exists, return it.
@@ -407,7 +373,6 @@ module Draco
     #
     #   Position.new(x: 100, y: 100)
     def initialize(values = {})
-      instance_variable_set("@delegations", self.class.delegations)
       self.class.attribute_options.each do |name, options|
         value = values.fetch(name.to_sym, options[:default].dup)
         instance_variable_set("@#{name}", value)
@@ -421,7 +386,8 @@ module Draco
     # This is empty by default but is present to allow plugins to tie into.
     #
     # Returns nothing.
-    def after_initialize; end
+    def after_initialize
+    end
 
     # Public: Serializes the Component to save the current state.
     #
@@ -430,7 +396,7 @@ module Draco
       attrs = { class: self.class.name.to_s, object_id: object_id }
 
       instance_variables.each do |attr|
-        name = attr.to_s.gsub("@", "").to_sym
+        name = attr.to_s.delete("@").to_sym
         attrs[name] = instance_variable_get(attr)
       end
 
@@ -523,7 +489,8 @@ module Draco
     # This is empty by default but is present to allow plugins to tie into.
     #
     # Returns nothing.
-    def after_initialize; end
+    def after_initialize
+    end
 
     # Public: Runs the system tick function.
     #
@@ -544,7 +511,8 @@ module Draco
     # context - The context object of the current tick from the game engine. In DragonRuby this is `args`.
     #
     # Returns nothing.
-    def before_tick(context); end
+    def before_tick(context)
+    end
 
     # Public: Runs the System logic for the current game engine tick.
     #
@@ -553,14 +521,16 @@ module Draco
     # context - The context object of the current tick from the game engine. In DragonRuby this is `args`.
     #
     # Returns nothing
-    def tick(context); end
+    def tick(context)
+    end
 
     # Public: Callback run after #tick is called.
     #
     # This is empty by default but is present to allow plugins to tie into.
     #
     # Returns nothing.
-    def after_tick(context); end
+    def after_tick(context)
+    end
 
     # Public: Serializes the System to save the current state.
     #
@@ -674,7 +644,8 @@ module Draco
     # This is empty by default but is present to allow plugins to tie into.
     #
     # Returns nothing.
-    def after_initialize; end
+    def after_initialize
+    end
 
     # Public: Callback run before #tick is called.
     #
@@ -712,7 +683,8 @@ module Draco
     # results - The System instances that were run.
     #
     # Returns nothing.
-    def after_tick(context, results); end
+    def after_tick(context, results)
+    end
 
     # Public: Callback to run when a component is added to an existing Entity.
     #
@@ -720,7 +692,8 @@ module Draco
     # component - The Component that was added to the Entity.
     #
     # Returns nothing.
-    def component_added(entity, component); end
+    def component_added(entity, component)
+    end
 
     # Public: Callback to run when a component is added to an existing Entity.
     #
@@ -728,7 +701,8 @@ module Draco
     # component - The Component that was removed from the Entity.
     #
     # Returns nothing.
-    def component_removed(entity, component); end
+    def component_removed(entity, component)
+    end
 
     # Public: Finds all Entities that contain all of the given Components.
     #
@@ -1056,7 +1030,7 @@ module Draco
           .map { |word| word.capitalize }
           .join
       end
-    .join("::")
+      .join("::")
   end
 
   # Internal: Converts an CamelCase String to a Class/Module

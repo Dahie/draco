@@ -45,9 +45,9 @@ RSpec.describe Draco::System do
     end
 
     context "when filtering SampleComponent with exception" do
-      subject { SampleSystem.filter(SampleComponent, except: [FooComponentComponent]) }
+      subject { SampleSystem.filter(SampleComponent, except: [FooComponent]) }
 
-      it { is_expected.to include(SampleComponent })
+      it { is_expected.to include(SampleComponent) }
     end
 
     context "when filtering :sample_component with exception" do

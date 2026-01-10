@@ -13,7 +13,7 @@ class FooComponent < Draco::Component; end
 
 class WorldEntity < Draco::Entity
   component WorldComponent
-  component :bar_component, class_name: "WorldComponent"
+  component :bar_component, class_name: "FooComponent"
 end
 
 class FilteredEntity < Draco::Entity
@@ -22,7 +22,7 @@ end
 
 class FooEntity < Draco::Entity
   component WorldComponent
-  component :bar_component, class_name: "WorldComponent"
+  component :bar_component, class_name: "FooComponent"
 end
 
 class WorldSystem < Draco::System
@@ -47,6 +47,10 @@ RSpec.describe Draco::World do
     subject { Draco::World.new.systems }
 
     it { is_expected.to be_empty }
+
+    context "warns on duplicate entries" do
+      pending
+    end
   end
 
   describe "#entities" do
@@ -166,7 +170,12 @@ RSpec.describe Draco::World do
     end
 
     it "works with multiple components" do
-      expect(world.filter(WorldComponent, :bar_component)).to include(entity, entity2)
+      expect(world.filter(WorldComponent, FilteredComponent)).to include(entity, entity2)
+    end
+    it "works after deleting components" do
+      expect(world.filter(WorldComponent, FilteredComponent)).to include(entity, entity2)
+      entity2.components.delete(entity.filtered_component)
+      expect(world.filter(WorldComponent, FilteredComponent)).to include(entity)
     end
 
     it "can make exceptions" do
